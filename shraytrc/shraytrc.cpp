@@ -7,10 +7,11 @@
 
 #include "common.h"
 
-#define OUTPUT_WIDTH 1920
-#define OUTPUT_HEIGHT 1080
+#define OUTPUT_WIDTH 640
+#define OUTPUT_HEIGHT 480
 #define MULTI_SAMPLING 2
 #define NUM_THREADS 9
+#define VIEWPORT_WIDTH 4.0f
 
 glm::vec4 lightColor(1, 1, 1, 1);
 
@@ -19,16 +20,11 @@ struct RenderContext
     unsigned char* pixelData;
     unsigned int rowstart;
     unsigned int rowend;
-    glm::mat4* view;
-    glm::vec3* transformed_orig;
     std::vector<RTRayTrace*> traceables;
-    float vpxmin;
-    float vpxmax;
-    float vpymin;
-    float vpymax;
+    glm::vec4* vdata;
 };
 
-void ShootRay(float xc, float zc, int ix, int iz, RenderContext* ctx, const glm::vec3& lightPos)
+void ShootRay(const glm::vec3& pos, int ix, int iz, RenderContext* ctx, const glm::vec3& lightPos)
 {
     float t0 = 0.0f;
     float t1 = 0.0f;
@@ -37,9 +33,8 @@ void ShootRay(float xc, float zc, int ix, int iz, RenderContext* ctx, const glm:
 
     // plane is 2 units behind x/y axis
     // and is 4 units by 4 units
-    glm::vec3 original_f(xc, -5.0f, zc);
-    glm::vec3 transformed_f = *ctx->view * glm::vec4(original_f, 1);
-    glm::vec3 dir = transformed_f - *ctx->transformed_orig;
+    glm::vec3 orig(ctx->vdata[4]);
+    glm::vec3 dir = pos - orig;
     glm::vec3 ndir = glm::normalize(dir);
 
     std::vector<std::tuple<float, uint32_t>> colors;
@@ -49,7 +44,7 @@ void ShootRay(float xc, float zc, int ix, int iz, RenderContext* ctx, const glm:
         glm::vec3 ix;
         glm::vec3 norm0;
         glm::vec3 bc;
-        bool b = (*iter)->IntersectWithRay(*ctx->transformed_orig, ndir, t0, clr0, &ix, &norm0, &bc, false);
+        bool b = (*iter)->IntersectWithRay(orig, ndir, t0, clr0, &ix, &norm0, &bc, false);
         if (b) {
             // ray intersects with item
             glm::vec3 lightDir = lightPos - ix;
@@ -103,18 +98,17 @@ void ShootRay(float xc, float zc, int ix, int iz, RenderContext* ctx, const glm:
         uint32_t objectColor = std::get<1>(colors[0]);
         memcpy(ctx->pixelData + (((iz * OUTPUT_WIDTH) + ix) * 4), &objectColor, 4);
     }
-
 }
 
 void RenderSinglePixel(RenderContext *ctx, int ix, int iz)
 {
-    float ystride = ctx->vpymax - ctx->vpymin;
-    float xstride = ctx->vpxmax - ctx->vpxmin;
-    glm::vec3 lightPos(-5, -5, 5);
-    int revz = (OUTPUT_HEIGHT - iz) - 1;
-    float zc = (((float)revz / (float)OUTPUT_HEIGHT) * ystride) + ctx->vpymin;
-    float xc = (((float)ix / (float)OUTPUT_WIDTH) * xstride) + ctx->vpxmin;
-    ShootRay(xc, zc, ix, iz, ctx, lightPos);
+    //float ystride = ctx->vpymax - ctx->vpymin;
+    //float xstride = ctx->vpxmax - ctx->vpxmin;
+    //glm::vec3 lightPos(-5, -5, 5);
+    //int revz = (OUTPUT_HEIGHT - iz) - 1;
+    //float zc = (((float)revz / (float)OUTPUT_HEIGHT) * ystride) + ctx->vpymin;
+    //float xc = (((float)ix / (float)OUTPUT_WIDTH) * xstride) + ctx->vpxmin;
+    //ShootRay(xc, zc, ix, iz, ctx, lightPos);
 }
 
 DWORD WINAPI RenderThread(void* context)
@@ -122,15 +116,26 @@ DWORD WINAPI RenderThread(void* context)
 
     RenderContext* ctx = (RenderContext*)context;
 
-    float ystride = ctx->vpymax - ctx->vpymin;
-    float xstride = ctx->vpxmax - ctx->vpxmin;
+    glm::vec3 xdistv = ctx->vdata[1] - ctx->vdata[0];
+    float xstride = glm::length(xdistv);
+    glm::vec3 ydistv = ctx->vdata[3] - ctx->vdata[0];
+    float ystride = glm::length(ydistv);
+
+    glm::vec3 normInXDir = glm::normalize(xdistv);
+    glm::vec3 normInYDir = glm::normalize(ydistv);
+
     glm::vec3 lightPos(-5, -5, 5);
-    for (unsigned int iz = ctx->rowstart; iz < ctx->rowend + 1; iz++) {
-        int revz = (OUTPUT_HEIGHT - iz) - 1;
-        float zc = (((float)revz / (float)OUTPUT_HEIGHT) * ystride) + ctx->vpymin;
+
+    for (unsigned int iy = ctx->rowstart; iy < ctx->rowend + 1; iy++) {
+        int revy = (OUTPUT_HEIGHT - iy) - 1;
+        float dy = (((float)revy / (float)OUTPUT_HEIGHT) * ystride);
         for (int ix = 0; ix < OUTPUT_WIDTH; ix++) {
-            float xc = (((float)ix / (float)OUTPUT_WIDTH) * xstride) + ctx->vpxmin;
-            ShootRay(xc, zc, ix, iz, ctx, lightPos);
+            float dx = (((float)ix / (float)OUTPUT_WIDTH) * xstride);
+
+            glm::vec3 p = glm::vec3(ctx->vdata[0]) + (normInXDir * dx);
+            p = p + (normInYDir * dy);
+
+            ShootRay(p, ix, iy, ctx, lightPos);
         }
     }
     return 0;
@@ -160,24 +165,44 @@ int main()
         (RTRayTrace*)&cube1
     };
 
-
-    glm::mat4 view = //glm::mat4(1.0f);
+    // the origin
+    glm::mat4 view = glm::mat4(1.0f);
         //glm::translate(glm::mat4(1.0f), glm::vec3(0, 10, 0));
-        glm::rotate(glm::mat4(1.0f), 3.14159f / -8.0f, glm::vec3(1, 0, 1));
+        //glm::rotate(glm::mat4(1.0f), 3.14159f / -8.0f, glm::vec3(1, 0, 1));
         // glm::rotate(glm::mat4(1.0f), 0.0f, glm::vec3(0, 0, 1));
     //glm::mat4 view = glm::mat4(1.0f);
 
     // original is 10 units behind x/y axis
-    glm::vec3 original_orig(0, -10, 0);
-    glm::vec3 transformed_orig = view * glm::vec4(original_orig,1);
+    glm::vec3 originalOrigin(0, -10, 0);
+    //glm::vec3 transformedOrigin = view * glm::vec4(originalOrigin,1);
+
+    float aspectRatio = (float)OUTPUT_WIDTH / (float)OUTPUT_HEIGHT;
+    float viewportHeight = VIEWPORT_WIDTH / aspectRatio;
+
+    glm::vec4 vp[5];
+    vp[0] = glm::vec4(0, 0, 0, 1);
+    vp[1] = glm::vec4(VIEWPORT_WIDTH, 0, 0, 1);
+    vp[2] = glm::vec4(VIEWPORT_WIDTH, 0, viewportHeight, 1);
+    vp[3] = glm::vec4(0, 0, viewportHeight, 1);
+    vp[4] = glm::vec4(VIEWPORT_WIDTH / 2, 0, viewportHeight / 2.0f, 1);
+    
+    glm::mat4 x = glm::translate(glm::mat4(1.0f), glm::vec3(0, -5, 0));
+    vp[4] = x * vp[4];
+    
+    x = glm::translate(glm::mat4(1.0f), glm::vec3(-2, -5, -1.125));
+    for (int i = 0; i < 5; i++) {
+        vp[i] = x * vp[i];
+    }
+    x = glm::rotate(glm::mat4(1.0f), 3.14159f / -8.0f, glm::vec3(1, 0, -1));
+    for (int i = 0; i < 5; i++) {
+        vp[i] = x * vp[i];
+    }
 
     unsigned char* data = (unsigned char*)malloc(OUTPUT_WIDTH * OUTPUT_HEIGHT * 4);
     unsigned char clearColor[4] = {0x00,0x00,0x00,0xff};
     for (int p = 0; p < OUTPUT_WIDTH * OUTPUT_HEIGHT; p++) {
         memcpy(data + (p * 4), clearColor, 4);
     }
-
-
 
     // start threads here
     int interval = OUTPUT_HEIGHT / NUM_THREADS;
@@ -187,10 +212,8 @@ int main()
             data, 
             c * interval,
             ((c + 1) * interval) - 1,
-            &view,
-            &transformed_orig,
             traceableObjects,
-            -2.0f, 2.0f, -1.125f, 1.125f
+            &vp[0]
         };
     }
 
