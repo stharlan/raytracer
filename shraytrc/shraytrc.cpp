@@ -7,8 +7,8 @@
 
 #include "common.h"
 
-#define OUTPUT_WIDTH 640
-#define OUTPUT_HEIGHT 480
+#define OUTPUT_WIDTH 1920
+#define OUTPUT_HEIGHT 1080
 #define MULTI_SAMPLING 2
 #define NUM_THREADS 9
 #define VIEWPORT_WIDTH 4.0f
@@ -24,12 +24,15 @@ struct RenderContext
     glm::vec4* vdata;
 };
 
+struct HitContext
+{
+    glm::vec3 intersection;
+    int32_t intColor;
+    glm::vec3 normal;
+};
+
 void ShootRay(const glm::vec3& pos, int ix, int iz, RenderContext* ctx, const glm::vec3& lightPos)
 {
-    float t0 = 0.0f;
-    float t1 = 0.0f;
-    int32_t clr0 = 0;
-    int32_t clr1 = 0;
 
     // plane is 2 units behind x/y axis
     // and is 4 units by 4 units
@@ -37,67 +40,71 @@ void ShootRay(const glm::vec3& pos, int ix, int iz, RenderContext* ctx, const gl
     glm::vec3 dir = pos - orig;
     glm::vec3 ndir = glm::normalize(dir);
 
-    std::vector<std::tuple<float, uint32_t>> colors;
+    // get the closest hit
+    float hitDist = 1e9;
+    HitContext hit;
     std::vector<RTRayTrace*>::iterator iter = ctx->traceables.begin();
     for (; iter != ctx->traceables.end(); ++iter)
     {
         glm::vec3 ix;
         glm::vec3 norm0;
         glm::vec3 bc;
+        float t0 = 0.0f;
+        int32_t clr0 = 0;
         bool b = (*iter)->IntersectWithRay(orig, ndir, t0, clr0, &ix, &norm0, &bc, false);
         if (b) {
-            // ray intersects with item
-            glm::vec3 lightDir = lightPos - ix;
-            std::vector<RTRayTrace*>::iterator iter1 = ctx->traceables.begin();
-            for (; iter1 != ctx->traceables.end(); ++iter1)
-            {
-                bool b1 = (*iter1)->IntersectWithRay(ix, lightDir, t1, clr1, NULL, NULL, NULL, false);
-                if (b1) {
-                    //colors.push_back(std::make_tuple(t0, 0xff000000));
-                    glm::vec3 vcolor = 0.2f * VectorFloatColorFromIntColorRGB(clr0);
-                    int32_t retClr = IntColorFromVectorFloatColorRGB(vcolor);
-                    colors.push_back(std::make_tuple(t0, retClr));
-                }
-                else {
-                    float diff = MAX(glm::dot(norm0, glm::normalize(lightDir)), 0.0f);
-                    glm::vec3 diffuse = diff * glm::vec3(1, 1, 1); // light color is 1,1,1
-                    glm::vec3 vcolor = diffuse * VectorFloatColorFromIntColorRGB(clr0);
-                    int32_t retClr = IntColorFromVectorFloatColorRGB(vcolor);
-                    colors.push_back(std::make_tuple(t0, retClr));
-                }
+            if (t0 < hitDist) {
+                hitDist = t0;
+                hit.intColor = clr0;
+                hit.normal = norm0;
+                hit.intersection = ix;
             }
         }
     }
 
+    // if there is a hit, check if it's in the shadow
+    // of another object
+    if (hitDist < 1e9)
+    {
+        glm::vec3 lightDir = lightPos - hit.intersection;
 
-    //int32_t clr = 0;
-    //bool hasFace = false;
-    //
-    //for(int faceIndex = 0; faceIndex < 12; faceIndex++) {
-    //    Tri& face = ctx->faceData[faceIndex];
-    //    face.b = rayTriangleIntersect(*ctx->transformed_orig, ndir, face, t);
-    //    if (face.b) {
-    //        colors.push_back(std::make_tuple(t, face.icolor));
-    //        face.t = t;
-    //    }
-    //}
+        float faceTowardsLight = glm::dot(lightDir, hit.normal);
+        bool inShadow = false;
+        if (faceTowardsLight < 0.0f) {
+            inShadow = true;
+        }
+        else {
+            std::vector<RTRayTrace*>::iterator iter1 = ctx->traceables.begin();
+            for (; iter1 != ctx->traceables.end(); ++iter1)
+            {
+                float t1 = 0.0f;
+                int32_t clr1 = 0;
+                bool b1 = (*iter1)->IntersectWithRay(hit.intersection, lightDir, t1, clr1, NULL, NULL, NULL, false);
+                if (b1) {
+                    inShadow = true;
+                    iter = ctx->traceables.end();
+                }
+            }
+        }
 
-    if (colors.size() > 0) {
-        //uint32_t blended = blend(std::get<1>(colors[0]), 0xff000000);
-        //if (colors.size() > 1) {
-        //    std::sort(colors.begin(), colors.end());
-        //    printf("colors\n");
-        //    printf("%.1f\n", std::get<0>(colors[0]));
-        //    for (int ci = 1; ci < colors.size(); ci++) {
-        //    //for(int ci = colors.size() - 1; ci > 0; ci--) {
-        //        printf("%.1f\n", std::get<0>(colors[ci]));
-        //        blended = blend(std::get<1>(colors[ci]), blended);
-        //    }
-        //}
-        if(colors.size() > 1) std::sort(colors.begin(), colors.end());
-        uint32_t objectColor = std::get<1>(colors[0]);
-        memcpy(ctx->pixelData + (((iz * OUTPUT_WIDTH) + ix) * 4), &objectColor, 4);
+        if (!inShadow) {
+            // not in shadow, use object color
+            float diff = MAX(glm::dot(hit.normal, glm::normalize(lightDir)), 0.0f);
+            glm::vec3 diffuse = diff * glm::vec3(1, 1, 1); // light color is 1,1,1
+            glm::vec3 vcolor = diffuse * VectorFloatColorFromIntColorRGB(hit.intColor);
+            int32_t retClr = IntColorFromVectorFloatColorRGB(vcolor);
+            memcpy(ctx->pixelData + (((iz * OUTPUT_WIDTH) + ix) * 4), &retClr, 4);
+        }
+        else {
+            // in shadow, make object color darker
+            // this code leaves a little ambient in the shadow
+            // it's not completely black
+            glm::vec3 vcolor = 0.2f * VectorFloatColorFromIntColorRGB(hit.intColor);
+            int32_t retClr = IntColorFromVectorFloatColorRGB(vcolor);
+            memcpy(ctx->pixelData + (((iz * OUTPUT_WIDTH) + ix) * 4), &retClr, 4);
+        }
     }
+
 }
 
 void RenderSinglePixel(RenderContext *ctx, int ix, int iz)
@@ -147,11 +154,17 @@ int main()
     RTCube cube;
     cube.SetColor(0xffff8f8f);
     
-    RTRect rect;
-    rect.transforms.push_back(glm::rotate(glm::mat4(1.0f), 3.14159f / 2.0f, glm::vec3(1, 0, 0)));
-    rect.transforms.push_back(glm::scale(glm::mat4(1.0f), glm::vec3(10, 1, 10)));
-    rect.transforms.push_back(glm::translate(glm::mat4(1.0f), glm::vec3(-5, 2, -5)));
-    rect.ExecuteTransform();
+    //RTRect rect;
+    //rect.transforms.push_back(glm::rotate(glm::mat4(1.0f), 3.14159f / 2.0f, glm::vec3(1, 0, 0)));
+    //rect.transforms.push_back(glm::scale(glm::mat4(1.0f), glm::vec3(10, 1, 10)));
+    //rect.transforms.push_back(glm::translate(glm::mat4(1.0f), glm::vec3(-5, 2, -5)));
+    //rect.ExecuteTransform();
+
+    RTCube cube2;
+    cube2.transforms.push_back(glm::rotate(glm::mat4(1.0f), 3.14159f / 2.0f, glm::vec3(1, 0, 0)));
+    cube2.transforms.push_back(glm::scale(glm::mat4(1.0f), glm::vec3(10, 1, 10)));
+    cube2.transforms.push_back(glm::translate(glm::mat4(1.0f), glm::vec3(-5, 3, -5)));
+    cube2.ExecuteTransform();
     
     RTCube cube1;
     cube1.transforms.push_back(glm::scale(glm::mat4(1.0f), glm::vec3(10, 10, 0.5)));
@@ -161,8 +174,8 @@ int main()
 
     std::vector<RTRayTrace*> traceableObjects = {
         (RTRayTrace*)&cube, 
-        (RTRayTrace*)&rect,
-        (RTRayTrace*)&cube1
+        (RTRayTrace*)&cube1,
+        (RTRayTrace*)&cube2
     };
 
 
@@ -183,12 +196,12 @@ int main()
     
     // viewer is originally defined as the center of the plane
     // transform the viewer on the y
-    glm::mat4 x = glm::translate(glm::mat4(1.0f), glm::vec3(0, -1, 0));
+    glm::mat4 x = glm::translate(glm::mat4(1.0f), glm::vec3(0, -5, 0));
     vp[4] = x * vp[4];
     
     // transform everything so the center of the plane
     // is at 0,0,0
-    x = glm::translate(glm::mat4(1.0f), glm::vec3(-2, -5, -1.125));
+    x = glm::translate(glm::mat4(1.0f), glm::vec3(-2, -10, -1.125));
     for (int i = 0; i < 5; i++) {
         vp[i] = x * vp[i];
     }
