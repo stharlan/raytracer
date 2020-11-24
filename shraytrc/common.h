@@ -7,6 +7,7 @@
 #define B2F(b) ((float)b / 255.0f)
 #define F2B(f) ((unsigned char)(f * 255.0f))
 #define MAX(v1,v2) (v1 > v2 ? v1 : v2)
+#define MIN(v1,v2) (v1 < v2 ? v1 : v2)
 
 #include <Windows.h>
 
@@ -35,3 +36,4 @@ uint32_t Blend(uint32_t fg, uint32_t bg);
 #include "RTTri.h"
 #include "RTRect.h"
 #include "RTCube.h"
+#include "RTSphere.h"

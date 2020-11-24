@@ -145,6 +145,7 @@
     <ClCompile Include="RTCube.cpp" />
     <ClCompile Include="RTRayTrace.cpp" />
     <ClCompile Include="RTRect.cpp" />
+    <ClCompile Include="RTSphere.cpp" />
     <ClCompile Include="RTTrans.cpp" />
     <ClCompile Include="RTTri.cpp" />
     <ClCompile Include="shraytrc.cpp" />
@@ -154,6 +155,7 @@
     <ClInclude Include="RTCube.h" />
     <ClInclude Include="RTRayTrace.h" />
     <ClInclude Include="RTRect.h" />
+    <ClInclude Include="RTSphere.h" />
     <ClInclude Include="RTTrans.h" />
     <ClInclude Include="RTTri.h" />
     <ClInclude Include="stb_image.h" />

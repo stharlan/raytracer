@@ -87,10 +87,15 @@ void ShootRay(const glm::vec3& pos, int ix, int iz, RenderContext* ctx, const gl
             }
         }
 
+        float ambient = 0.2f;
         if (!inShadow) {
             // not in shadow, use object color
             float diff = MAX(glm::dot(hit.normal, glm::normalize(lightDir)), 0.0f);
             glm::vec3 diffuse = diff * glm::vec3(1, 1, 1); // light color is 1,1,1
+            // scale diffuse from 1 to 0.2
+            diffuse.x = diffuse.x + ((1.0f - diffuse.x) * ambient);
+            diffuse.y = diffuse.y + ((1.0f - diffuse.y) * ambient);
+            diffuse.z = diffuse.z + ((1.0f - diffuse.z) * ambient);
             glm::vec3 vcolor = diffuse * VectorFloatColorFromIntColorRGB(hit.intColor);
             int32_t retClr = IntColorFromVectorFloatColorRGB(vcolor);
             memcpy(ctx->pixelData + (((iz * OUTPUT_WIDTH) + ix) * 4), &retClr, 4);
@@ -99,7 +104,7 @@ void ShootRay(const glm::vec3& pos, int ix, int iz, RenderContext* ctx, const gl
             // in shadow, make object color darker
             // this code leaves a little ambient in the shadow
             // it's not completely black
-            glm::vec3 vcolor = 0.2f * VectorFloatColorFromIntColorRGB(hit.intColor);
+            glm::vec3 vcolor = ambient * VectorFloatColorFromIntColorRGB(hit.intColor);
             int32_t retClr = IntColorFromVectorFloatColorRGB(vcolor);
             memcpy(ctx->pixelData + (((iz * OUTPUT_WIDTH) + ix) * 4), &retClr, 4);
         }
@@ -107,15 +112,27 @@ void ShootRay(const glm::vec3& pos, int ix, int iz, RenderContext* ctx, const gl
 
 }
 
-void RenderSinglePixel(RenderContext *ctx, int ix, int iz)
+void RenderSinglePixel(RenderContext *ctx, int ix, int iy)
 {
-    //float ystride = ctx->vpymax - ctx->vpymin;
-    //float xstride = ctx->vpxmax - ctx->vpxmin;
-    //glm::vec3 lightPos(-5, -5, 5);
-    //int revz = (OUTPUT_HEIGHT - iz) - 1;
-    //float zc = (((float)revz / (float)OUTPUT_HEIGHT) * ystride) + ctx->vpymin;
-    //float xc = (((float)ix / (float)OUTPUT_WIDTH) * xstride) + ctx->vpxmin;
-    //ShootRay(xc, zc, ix, iz, ctx, lightPos);
+
+    glm::vec3 xdistv = ctx->vdata[1] - ctx->vdata[0];
+    float xstride = glm::length(xdistv);
+    glm::vec3 ydistv = ctx->vdata[3] - ctx->vdata[0];
+    float ystride = glm::length(ydistv);
+
+    glm::vec3 normInXDir = glm::normalize(xdistv);
+    glm::vec3 normInYDir = glm::normalize(ydistv);
+
+    glm::vec3 lightPos(-2, -5, 5);
+
+    int revy = (OUTPUT_HEIGHT - iy) - 1;
+    float dy = (((float)revy / (float)OUTPUT_HEIGHT) * ystride);
+    float dx = (((float)ix / (float)OUTPUT_WIDTH) * xstride);
+
+    glm::vec3 p = glm::vec3(ctx->vdata[0]) + (normInXDir * dx);
+    p = p + (normInYDir * dy);
+
+    ShootRay(p, ix, iy, ctx, lightPos);
 }
 
 DWORD WINAPI RenderThread(void* context)
@@ -131,7 +148,7 @@ DWORD WINAPI RenderThread(void* context)
     glm::vec3 normInXDir = glm::normalize(xdistv);
     glm::vec3 normInYDir = glm::normalize(ydistv);
 
-    glm::vec3 lightPos(-5, -5, 5);
+    glm::vec3 lightPos(-2, -5, 5);
 
     for (unsigned int iy = ctx->rowstart; iy < ctx->rowend + 1; iy++) {
         int revy = (OUTPUT_HEIGHT - iy) - 1;
@@ -172,8 +189,11 @@ int main()
     cube1.ExecuteTransform();
     cube1.SetColor(0xff8f8f8f);
 
+    RTSphere sphere;
+
     std::vector<RTRayTrace*> traceableObjects = {
-        (RTRayTrace*)&cube, 
+        (RTRayTrace*)&sphere,
+        (RTRayTrace*)&cube,
         (RTRayTrace*)&cube1,
         (RTRayTrace*)&cube2
     };
@@ -243,7 +263,7 @@ int main()
 
     WaitForMultipleObjects(NUM_THREADS, t, TRUE, INFINITE);
 
-    //RenderSinglePixel(&ctx0, 575, 368);
+    //RenderSinglePixel(&ctx[0], 362, 250);
 
     LARGE_INTEGER ct1;
     QueryPerformanceCounter(&ct1);
