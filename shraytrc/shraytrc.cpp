@@ -165,34 +165,35 @@ int main()
         (RTRayTrace*)&cube1
     };
 
-    // the origin
-    glm::mat4 view = glm::mat4(1.0f);
-        //glm::translate(glm::mat4(1.0f), glm::vec3(0, 10, 0));
-        //glm::rotate(glm::mat4(1.0f), 3.14159f / -8.0f, glm::vec3(1, 0, 1));
-        // glm::rotate(glm::mat4(1.0f), 0.0f, glm::vec3(0, 0, 1));
-    //glm::mat4 view = glm::mat4(1.0f);
-
-    // original is 10 units behind x/y axis
-    glm::vec3 originalOrigin(0, -10, 0);
-    //glm::vec3 transformedOrigin = view * glm::vec4(originalOrigin,1);
 
     float aspectRatio = (float)OUTPUT_WIDTH / (float)OUTPUT_HEIGHT;
     float viewportHeight = VIEWPORT_WIDTH / aspectRatio;
 
+    // these are all defined in the x/z plane
+    // and transformed to where I want them to be
     glm::vec4 vp[5];
+    // lower left corner of viewport (min)
     vp[0] = glm::vec4(0, 0, 0, 1);
+    // viewport corners counter-clockwise from ll corner
     vp[1] = glm::vec4(VIEWPORT_WIDTH, 0, 0, 1);
     vp[2] = glm::vec4(VIEWPORT_WIDTH, 0, viewportHeight, 1);
     vp[3] = glm::vec4(0, 0, viewportHeight, 1);
+    // viewer origin
     vp[4] = glm::vec4(VIEWPORT_WIDTH / 2, 0, viewportHeight / 2.0f, 1);
     
-    glm::mat4 x = glm::translate(glm::mat4(1.0f), glm::vec3(0, -5, 0));
+    // viewer is originally defined as the center of the plane
+    // transform the viewer on the y
+    glm::mat4 x = glm::translate(glm::mat4(1.0f), glm::vec3(0, -1, 0));
     vp[4] = x * vp[4];
     
+    // transform everything so the center of the plane
+    // is at 0,0,0
     x = glm::translate(glm::mat4(1.0f), glm::vec3(-2, -5, -1.125));
     for (int i = 0; i < 5; i++) {
         vp[i] = x * vp[i];
     }
+    // rotate everything a bit to get a cockeyed view
+    // this is the best way to see the shadow of the block (for now)
     x = glm::rotate(glm::mat4(1.0f), 3.14159f / -8.0f, glm::vec3(1, 0, -1));
     for (int i = 0; i < 5; i++) {
         vp[i] = x * vp[i];
