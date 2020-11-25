@@ -15,6 +15,11 @@
 
 glm::vec4 lightColor(1, 1, 1, 1);
 
+stbi_uc* pixels = NULL;
+int texWidth = 0;
+int texHeight = 0;
+int texChannels = 0;
+
 struct RenderContext
 {
     unsigned char* pixelData;
@@ -48,14 +53,25 @@ void ShootRay(const glm::vec3& pos, int ix, int iz, RenderContext* ctx, const gl
     {
         glm::vec3 ix;
         glm::vec3 norm0;
-        glm::vec3 bc;
+        glm::vec2 texc;
         float t0 = 0.0f;
         int32_t clr0 = 0;
-        bool b = (*iter)->IntersectWithRay(orig, ndir, t0, clr0, &ix, &norm0, &bc, false);
+        bool b = (*iter)->IntersectWithRay(orig, ndir, t0, clr0, &ix, &norm0, &texc, false);
         if (b) {
             if (t0 < hitDist) {
+
                 hitDist = t0;
-                hit.intColor = clr0;
+                if ((*iter)->GetType() == SHAPE_CUBE)
+                {
+                    // if texturing, use the barycentric coords to get
+                    // the texture color
+                    int px = texc.x * texWidth;
+                    int py = texc.y * texHeight;
+                    memcpy(&hit.intColor, pixels + (py * texWidth * 4) + (px * 4), 4);
+                }
+                else {
+                    hit.intColor = clr0;
+                }
                 hit.normal = norm0;
                 hit.intersection = ix;
             }
@@ -168,6 +184,9 @@ DWORD WINAPI RenderThread(void* context)
 int main()
 {
 
+    pixels = stbi_load("c:\\temp\\blue_box.png", &texWidth, &texHeight,
+        &texChannels, STBI_rgb_alpha);
+
     RTCube cube;
     cube.SetColor(0xffff8f8f);
     
@@ -263,7 +282,7 @@ int main()
 
     WaitForMultipleObjects(NUM_THREADS, t, TRUE, INFINITE);
 
-    //RenderSinglePixel(&ctx[0], 362, 250);
+    //RenderSinglePixel(&ctx[0], 388,204);
 
     LARGE_INTEGER ct1;
     QueryPerformanceCounter(&ct1);
@@ -300,6 +319,8 @@ int main()
         4, msdata, OUTPUT_WIDTH / MULTI_SAMPLING * 4);
     free(data);
     free(msdata);
+
+    stbi_image_free(pixels);
 
 }
 

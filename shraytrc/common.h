@@ -9,6 +9,11 @@
 #define MAX(v1,v2) (v1 > v2 ? v1 : v2)
 #define MIN(v1,v2) (v1 < v2 ? v1 : v2)
 
+#define SHAPE_CUBE 1
+#define SHAPE_SPHERE 2
+#define SHAPE_TRI 3
+#define SHAPE_RECT 4
+
 #include <Windows.h>
 
 #include <iostream>

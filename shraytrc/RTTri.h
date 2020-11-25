@@ -26,13 +26,16 @@ public:
         newTri->vertices[1] = v1;
         newTri->vertices[2] = v2;
         newTri->color = this->color;
+        newTri->tex[0] = this->tex[0];
+        newTri->tex[1] = this->tex[1];
+        newTri->tex[2] = this->tex[2];
         newTri->calculateNormal();
     }
 
     bool IntersectWithRay(const glm::vec3& orig, const glm::vec3& dir, float& t,
         int32_t& returnIntColor, 
         glm::vec3* returnIntersectionPoint, glm::vec3* returnNormal, 
-        glm::vec3* returnBarycentricCoordintes, bool debug)
+        glm::vec2* texc, bool debug)
     {
         glm::vec3 v0v1 = vertices[1] - vertices[0];
         glm::vec3 v0v2 = vertices[2] - vertices[0];
@@ -82,6 +85,8 @@ public:
             returnNormal->z = normal.z;
         }
 
+        glm::vec3 texcc;
+
         //[(b - a)x(q - a)].n
         glm::vec3 edge0 = vertices[1] - vertices[0];
         glm::vec3 vp0 = ix - vertices[0];
@@ -90,10 +95,8 @@ public:
             //printf("outside 1\n");
             return false;
         }
-        if (returnBarycentricCoordintes) {
-            glm::vec3 C = glm::cross(edge0, vp0);
-            returnBarycentricCoordintes->x = (glm::length(C) / 2) / area;
-        }
+        glm::vec3 C = glm::cross(edge0, vp0);
+        texcc.z = (glm::length(C) / 2) / area;
 
         glm::vec3 edge1 = vertices[2] - vertices[1];
         glm::vec3 vp1 = ix - vertices[1];
@@ -102,10 +105,8 @@ public:
             //printf("outside 2\n");
             return false;
         }
-        if (returnBarycentricCoordintes) {
-            glm::vec3 C = glm::cross(edge1, vp1);
-            returnBarycentricCoordintes->y = (glm::length(C) / 2) / area;
-        }
+        C = glm::cross(edge1, vp1);
+        texcc.x = (glm::length(C) / 2) / area;
 
         glm::vec3 edge2 = vertices[0] - vertices[2];
         glm::vec3 vp2 = ix - vertices[2];
@@ -114,9 +115,16 @@ public:
             //printf("outside 3\n");
             return false;
         }
-        if (returnBarycentricCoordintes) {
-            glm::vec3 C = glm::cross(edge2, vp2);
-            returnBarycentricCoordintes->z = (glm::length(C) / 2) / area;
+        C = glm::cross(edge2, vp2);
+        texcc.y = (glm::length(C) / 2) / area;
+
+        if (texc) {
+            texc->x = (texcc.x * this->tex[0].x)
+                + (texcc.y * this->tex[1].x)
+                + (texcc.z * this->tex[2].x);
+            texc->y = (texcc.x * this->tex[0].y)
+                + (texcc.y * this->tex[1].y)
+                + (texcc.z * this->tex[2].y);
         }
 
         returnIntColor = color;
@@ -130,8 +138,14 @@ public:
         return true;
     }
 
+    int GetType()
+    {
+        return SHAPE_TRI;
+    }
+
 	glm::vec3 vertices[3];
 	glm::vec3 normal;
+    glm::vec2 tex[3];
 	int32_t color;
 	float d;
 };

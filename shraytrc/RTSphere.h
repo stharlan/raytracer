@@ -10,7 +10,7 @@ public:
 		this->sphereColor = 0xff00ff00;
 	}
 	bool IntersectWithRay(const glm::vec3& orig, const glm::vec3& dir, float& t, int32_t& color,
-		glm::vec3* ixpoint, glm::vec3* norm, glm::vec3* bc, bool debug)
+		glm::vec3* ixpoint, glm::vec3* norm, glm::vec2* texc, bool debug)
 	{
 
 		glm::vec3 ndir = glm::normalize(dir);
@@ -54,6 +54,11 @@ public:
 		}
 
 		return true;
+	}
+
+	int GetType()
+	{
+		return SHAPE_SPHERE;
 	}
 
 	glm::vec3 centerOfSphere;

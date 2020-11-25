@@ -20,10 +20,10 @@ public:
 	}
 
 	bool IntersectWithRay(const glm::vec3& orig, const glm::vec3& dir, float& t, int32_t& color, 
-		glm::vec3* ixpoint, glm::vec3* norm, glm::vec3* bc, bool debug)
+		glm::vec3* ixpoint, glm::vec3* norm, glm::vec2* texc, bool debug)
 	{
 		for (int i = 0; i < 2; i++) {
-			if (this->transformedTriangles[i].IntersectWithRay(orig, dir, t, color, ixpoint, norm, bc, false)) {
+			if (this->transformedTriangles[i].IntersectWithRay(orig, dir, t, color, ixpoint, norm, texc, false)) {
 				return true;
 			}
 		}
@@ -36,6 +36,11 @@ public:
 		this->triangles[0].GetTransformed(&this->transformedTriangles[0]);
 		this->triangles[1].transforms = this->transforms;
 		this->triangles[1].GetTransformed(&this->transformedTriangles[1]);
+	}
+
+	int GetType()
+	{
+		return SHAPE_RECT;
 	}
 
 	RTTri triangles[2];

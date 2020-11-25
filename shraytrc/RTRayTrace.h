@@ -9,8 +9,9 @@ public:
 		int32_t& color, 
 		glm::vec3* ixpoint,
 		glm::vec3* norm,
-		glm::vec3* bc,
+		glm::vec2* texc,
 		bool debug) = 0;
+	virtual int GetType() = 0;
 };
 
 
